@@ -1,3 +1,3 @@
-pub mod neuron;
-mod id_manager;
-mod message;
+pub mod     neuron        ;
+pub mod     buffer_manager;
+pub mod     layer         ; 

@@ -1,81 +1,60 @@
-use crate::message::{Message, MessageBuffer};
-use crate::id_manager::{Id, IdManager};
+use crate::buffer_manager::Buffer;
 
-struct Neuron
+pub struct Neuron
 {
-    id:             Id,
-    weight:         f32,
-    input_data:     Vec<u8>,
-    output_data:    Message,
-    subscribed_to:  Vec<Id>,
+    pub weights      :        Vec<f32>,
+    pub activation_fn:        fn( &Vec<f32> , Vec<u8> ) -> u8,
+    pub pos_in_layer :        usize,
+    pub write_mask   :        Vec<bool>
 }
 
 impl Neuron 
 {
-    fn new(id_mnger: &mut IdManager) -> Neuron
-    {
-        let new_id = id_mnger.get_id();
-        Neuron 
-        { 
-            id:             new_id, 
-            weight:         0.0, 
-            input_data:     Vec::new(), 
-            output_data:    Message::new(new_id), 
-            subscribed_to:  Vec::new()
-        }
-    }
 
-    fn set_input_data(&mut self, msg_buffer: MessageBuffer) 
+    pub fn new( 
+                weights      :  Vec<f32>                    , 
+                activation_fn:  fn(&Vec<f32>, Vec<u8>) -> u8, // user can define a custom activation function
+                pos_in_layer :  usize                       ,
+                write_mask   :  Vec<bool>                   , // TRUE is write, FALSE if not to write, decided by layer
+               )             -> Neuron
     {
-        //construct the input data for the neuron based on what is in the buffer
-        for msg in msg_buffer.messages.iter() 
+        Neuron
         {
-            //quick and dirty way of doing this. It will be a memory hog storing all these copies
-            // will have to optimize for memory in the future
-            for _id in self.subscribed_to.iter()
-            {
-                if *_id == msg.author
-                {
-                    self.input_data.push(msg.data.clone());
-                }
-            }
+            weights        ,
+            activation_fn  ,
+            pos_in_layer   ,
+            write_mask     , 
         }
     }
 
-    fn send_output_data(&self, msg_buffer: &mut MessageBuffer)
+    pub fn invoke(&self, buffer: &mut Buffer)
     {
-        msg_buffer.messages.push(self.output_data.clone());
+        let out_data = (self.activation_fn)(&self.weights, self.read_buffer(buffer));
+        self.write_buffer(buffer, out_data)
+
     }
 
-    fn subscribe(&mut self, id : Id)
+    fn read_buffer(&self, buffer: &Buffer) -> Vec<u8>
     {
-        self.subscribed_to.push(id);
+        return buffer.get(self.pos_in_layer).unwrap().clone();
+    }
+
+    fn write_buffer(&self, buffer: &mut Buffer, write_data: u8)
+    {
+        let counter = 0;
+        for data_vec in buffer.iter_mut()
+        {
+            if  *self.write_mask.get(counter).unwrap()  // Mask set by layer, if layer says write, do so, decided AOT (should be safe, so just unwrap)
+            {
+                data_vec.push(write_data);
+            }
+            
+        } 
     }
 }
 
 #[cfg(test)]
-mod tests 
+mod tests
 {
-    use super::*;
 
-    #[test]
-    fn two_neuron_msg_test()
-    {
-        let mut id_mngr = IdManager::new();
-
-        let mut msg_buffer = MessageBuffer::new();
-
-        let mut neuron1 = Neuron::new(&mut id_mngr); //id  1
-        let mut neuron2 = Neuron::new(&mut id_mngr); //id  2
-
-        neuron2.subscribe(1);
-        neuron1.output_data.data = 0;
-        neuron1.send_output_data(&mut msg_buffer);
-
-        neuron2.set_input_data(msg_buffer);
-
-        //hacky way to test data is the same   
-        //output data that is written to the buffer, cloned out of the buffer and into the first pos of the neuron
-        assert_eq!(neuron1.output_data.data, *neuron2.input_data.get(0).unwrap());
-    }
 }
